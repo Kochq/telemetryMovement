@@ -1,44 +1,75 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
+#include <string.h>
+
+typedef struct Queue {
+    struct Node* first;
+    struct Node* last;
+    short count;
+} Queue;
+
+typedef struct Position {
+    float latE;
+    float lngE;
+    float latC;
+    float lngC;
+} Position;
 
 typedef struct Node {
-    int val;
-    struct Node *next;
+    float azimuth;
+    struct Node* next;
 } Node;
 
-void enqueue(Node** first, Node** last, short *queueCount, int val) {
-    Node* newNode = (Node *) malloc(sizeof(Node));
-    newNode->val = val;
+typedef enum Direccion {
+    FW = 0,
+    RV = 1,
+    STOP = 2
+} Direccion;
 
-    if(*first == NULL) {
-        *first = newNode;
-        *last = newNode;
-        (*first)->next = *last;
-        (*queueCount)++;
+void enqueue(Queue* queue, float azimuth) {
+    Node* newNode = (Node *) malloc(sizeof(Node));
+    newNode->azimuth = azimuth;
+
+    if(queue->first == NULL) {
+        queue->first = newNode;
+        queue->last = newNode;
+        queue->first->next = queue->last;
+        queue->count++;
 
         return;
     }
     
-    if(*queueCount < 5) {
-        (*queueCount)++;
+    if(queue->count < 5) {
+        queue->count++;
     } else {
-        Node* t = *first;
-        *first = (*first)->next;
+        Node* t = queue->first;
+        queue->first = queue->first->next;
         free(t);
     }
 
-    (*last)->next = newNode;
-    *last = newNode;
+    queue->last->next = newNode;
+    queue->last = newNode;
     return;
 }
 
-void printQue(Node** first, Node** last, short queueCount) {
-    Node* t = *first;
-    for(short i = 0; i <= queueCount; i++) {
-        printf("Item: %d \n", t->val);
-        t = t->next;
+void printQue(Node* first) {
+    while(first != NULL) {
+        printf("Item: %f \n", first->azimuth);
+        first = first->next;
     }
+}
+
+void clearQueue(Queue* queue) {
+    while(queue->first != NULL) {
+        Node* t = queue->first;
+        queue->first = queue->first->next;
+        free(t);
+    }
+    queue->first = NULL;
+    queue->last = NULL;
+    queue->count = 0;
 }
 
 float distanciaGeodesica(float lat1, float long1, float lat2, float long2){
@@ -58,8 +89,8 @@ float distanciaGeodesica(float lat1, float long1, float lat2, float long2){
 float Calculo_AZIMUTH(float latC, float lngC, float latE, float lngE) {
     float x42 = 0;
 
-    float dist = distanciaGeodesica(latC, lngC, latE, lngE);
-    float y42 = latC + (dist / 109642);
+    float dist = distanciaGeodesica(lngE, lngC, latE, lngE);
+    float y42 = lngE + (dist / 109642);
     float dist2 = distanciaGeodesica(y42, lngC, latE, lngE); // Distancia entre el Centro_NORTE y el extremo
 
     float x2 = dist2 * dist2;
@@ -70,19 +101,63 @@ float Calculo_AZIMUTH(float latC, float lngC, float latE, float lngE) {
     else if(y42 > 1) y42 = 1.0;
 
     if(lngC >= lngE) { // El Centro esta mas al Este
-        if(latC > latE) x42 = 360 - (acos(y42) * 57.29578); // El Centro esta mas al Norte
+        if(lngE > latE) x42 = 360 - (acos(y42) * 57.29578); // El Centro esta mas al Norte
         else x42 = 360 - (acos(y42) * 57.29578);
     }
     else if(lngC < lngE) { // El Centro esta mas al Oeste
-        if(latC > latE) x42 = acos(y42) * 57.29578; // El Centro esta mas al Norte
+        if(lngE > latE) x42 = acos(y42) * 57.29578; // El Centro esta mas al Norte
         else x42 = acos(y42) * 57.29578;
     }
 
     return x42;
 }
 
+void checkNewPos(Queue* queue, Position pos, Direccion* dir) {
+    float currentAzimuth = Calculo_AZIMUTH(pos.lngE, pos.lngC, pos.latE, pos.lngE);
+
+    if(queue->count == 0) {
+        enqueue(queue, currentAzimuth);
+    } else if(queue->count == 1) {
+        bool isAzimuthInc = (currentAzimuth > queue->last->azimuth);
+
+        if (currentAzimuth != queue->last->azimuth) {
+            enqueue(queue, currentAzimuth);
+            *dir = isAzimuthInc ? FW : RV;
+        } else {
+            *dir = STOP;
+        }
+    } else {
+        bool isAzimuthInc = (currentAzimuth > queue->last->azimuth);
+
+        if ((isAzimuthInc && *dir == FW) || (!isAzimuthInc && *dir == RV)) {
+            printf("thing");
+            enqueue(queue, currentAzimuth);
+        } else if(currentAzimuth != queue->last->azimuth) {
+            clearQueue(queue);
+        }
+    }
+}
+
 int main() {
-    Node* first = NULL;
-    Node* last = NULL;
-    short queueCount = 0;
+    Queue queue;
+    queue.last = NULL;
+    queue.first = NULL;
+    queue.count = 0;
+    Direccion dir = STOP;
+
+    Position pos;
+    pos.latE = 3404.4346;
+    pos.lngE = 06019.2300;
+    pos.latC = 3404.3714;
+    pos.lngC = 06019.3936;
+    checkNewPos(&queue, pos, &dir);
+
+    pos.latE = 3404.4346;
+    pos.lngE = 06019.2300;
+    pos.latC = 3404.3714;
+    pos.lngC = 06019.3936;
+    checkNewPos(&queue, pos, &dir);
+
+    printQue(queue.first);
+    printf("Count: %d", queue.count);
 }

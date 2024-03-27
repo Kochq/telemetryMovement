@@ -4,7 +4,12 @@ function distanciaGeodesica(float $lat1, float $long1, float $lat2, float $long2
 	$radtodeg = 57.29578;
 
 	$dlong = ($long1 - $long2);
-	$dvalue = (sin($lat1 * $degtorad)*sin($lat2 * $degtorad))+(cos($lat1*$degtorad)*cos($lat2*$degtorad)*cos($dlong * $degtorad));
+    $v1 = sin($lat1 * $degtorad);
+    $v2 = sin($lat2 * $degtorad);
+    $v3 = cos($lat1*$degtorad);
+    $v4 = cos($lat2*$degtorad);
+    $v5 = cos($dlong * $degtorad);
+	$dvalue = ($v1*$v2)+($v3*$v4*$v5);
 
 	$dd = acos($dvalue) * $radtodeg;
 
@@ -37,5 +42,22 @@ function Calculo_AZIMUTH(float $latC, float $lngC, float $latE, float $lngE) {
     }
 
     return $x42;
+}
+
+function procesar_pos(string $lat, string $signo): float {
+    if($signo == "S" || $signo = "W") {
+        $signo = -1;
+    } else {
+        $signo = 1;
+    }
+
+    $grados = floatVal(substr($lat,strpos($lat,".") - 4 , 2));
+    $minutos = floatVal(substr($lat,strpos($lat,".") - 2 , 8));
+    $decimas_de_grado = $minutos / 60;
+
+    $pos_procesada = $signo * ($grados + $decimas_de_grado);
+    $pos_procesada = substr($pos_procesada, 0, 8);
+
+    return $pos_procesada;
 }
 ?>

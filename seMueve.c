@@ -11,14 +11,14 @@ typedef struct Queue {
 } Queue;
 
 typedef struct Position {
-    float latE;
-    float lngE;
-    float latC;
-    float lngC;
+    double latE;
+    double lngE;
+    double latC;
+    double lngC;
 } Position;
 
 typedef struct Node {
-    float azimuth;
+    double azimuth;
     struct Node* next;
 } Node;
 
@@ -28,7 +28,7 @@ typedef enum Direccion {
     STOP = 2
 } Direccion;
 
-void enqueue(Queue* queue, float azimuth) {
+void enqueue(Queue* queue, double azimuth) {
     Node* newNode = (Node *) malloc(sizeof(Node));
     newNode->azimuth = azimuth;
 
@@ -72,40 +72,41 @@ void clearQueue(Queue* queue) {
     queue->count = 0;
 }
 
-float distanciaGeodesica(float lat1, float long1, float lat2, float long2){
-	float degtorad = 0.01745329;
-	float radtodeg = 57.29578;
+double distanciaGeodesica(double lat1, double long1, double lat2, double long2){
+	double degtorad = 0.01745329;
+	double radtodeg = 57.29578;
 
-    float dlong = (long1 - long2);
-	float dvalue = (sin(lat1 * degtorad)*sin(lat2 * degtorad))+(cos(lat1*degtorad)*cos(lat2*degtorad)*cos(dlong * degtorad));
+	double dlong = (long1 - long2);
+	double dvalue = (sin(lat1 * degtorad)*sin(lat2 * degtorad))+(cos(lat1*degtorad)*cos(lat2*degtorad)*cos(dlong * degtorad));
 
-	float dd = acos(dvalue) * radtodeg;
+    double v6 = acos(dvalue);
+	double dd = v6 * radtodeg;
 
-	float km = (dd * 109642);
+	double km = (dd * 109642);
 
 	return km;
 }
 
-float Calculo_AZIMUTH(float latC, float lngC, float latE, float lngE) {
-    float x42 = 0;
+double Calculo_AZIMUTH(double latC, double lngC, double latE, double lngE) {
+    double x42 = 0;
 
-    float dist = distanciaGeodesica(lngE, lngC, latE, lngE);
-    float y42 = lngE + (dist / 109642);
-    float dist2 = distanciaGeodesica(y42, lngC, latE, lngE); // Distancia entre el Centro_NORTE y el extremo
+    double dist = distanciaGeodesica(latC, lngC, latE, lngE);
+    double y42 = latC + (dist / 109642);
+    double dist2 = distanciaGeodesica(y42, lngC, latE, lngE); // Distancia entre el Centro_NORTE y el extremo
 
-    float x2 = dist2 * dist2;
-    float y2 = 2 * dist * dist;
+    double x2 = dist2 * dist2;
+    double y2 = 2 * dist * dist;
     y42 = 1 - (x2 / y2);
 
     if ((y42 < 0) && (y42 < -1)) y42 = -1.0;
     else if(y42 > 1) y42 = 1.0;
 
     if(lngC >= lngE) { // El Centro esta mas al Este
-        if(lngE > latE) x42 = 360 - (acos(y42) * 57.29578); // El Centro esta mas al Norte
+        if(latC > latE) x42 = 360 - (acos(y42) * 57.29578); // El Centro esta mas al Norte
         else x42 = 360 - (acos(y42) * 57.29578);
     }
     else if(lngC < lngE) { // El Centro esta mas al Oeste
-        if(lngE > latE) x42 = acos(y42) * 57.29578; // El Centro esta mas al Norte
+        if(latC > latE) x42 = acos(y42) * 57.29578; // El Centro esta mas al Norte
         else x42 = acos(y42) * 57.29578;
     }
 
@@ -113,7 +114,7 @@ float Calculo_AZIMUTH(float latC, float lngC, float latE, float lngE) {
 }
 
 void checkNewPos(Queue* queue, Position pos, Direccion* dir) {
-    float currentAzimuth = Calculo_AZIMUTH(pos.lngE, pos.lngC, pos.latE, pos.lngE);
+    double currentAzimuth = Calculo_AZIMUTH(pos.lngE, pos.lngC, pos.latE, pos.lngE);
 
     if(queue->count == 0) {
         enqueue(queue, currentAzimuth);
@@ -130,12 +131,29 @@ void checkNewPos(Queue* queue, Position pos, Direccion* dir) {
         bool isAzimuthInc = (currentAzimuth > queue->last->azimuth);
 
         if ((isAzimuthInc && *dir == FW) || (!isAzimuthInc && *dir == RV)) {
-            printf("thing");
             enqueue(queue, currentAzimuth);
         } else if(currentAzimuth != queue->last->azimuth) {
             clearQueue(queue);
         }
     }
+}
+
+double procesar_pos(const char *lat) {
+    char grados_str[3], minutos_str[9];
+    double grados, minutos, decimas_de_grado, pos_procesada;
+
+    strncpy(grados_str, lat + (strstr(lat, ".") - lat) - 4, 2);
+    grados_str[2] = '\0';
+    strncpy(minutos_str, lat + (strstr(lat, ".") - lat) - 2, 8);
+    minutos_str[8] = '\0';
+
+    grados = atof(grados_str);
+    minutos = atof(minutos_str);
+    decimas_de_grado = minutos / 60;
+
+    pos_procesada = -1 * (grados + decimas_de_grado);
+
+    return pos_procesada;
 }
 
 int main() {
@@ -146,18 +164,180 @@ int main() {
     Direccion dir = STOP;
 
     Position pos;
-    pos.latE = 3404.4346;
-    pos.lngE = 06019.2300;
-    pos.latC = 3404.3714;
-    pos.lngC = 06019.3936;
+    pos.latE = procesar_pos("3442.3312");
+    pos.lngE = procesar_pos("06011.2296");
+    pos.latC = procesar_pos("3442.1444");
+    pos.lngC = procesar_pos("06011.5048");
     checkNewPos(&queue, pos, &dir);
 
-    pos.latE = 3404.4346;
-    pos.lngE = 06019.2300;
-    pos.latC = 3404.3714;
-    pos.lngC = 06019.3936;
+
+    pos.latE = procesar_pos("3442.3312");
+    pos.lngE = procesar_pos("06011.2296");
+    pos.latC = procesar_pos("3442.1444");
+    pos.lngC = procesar_pos("06011.5048");
     checkNewPos(&queue, pos, &dir);
+
+
+    pos.latE = procesar_pos("3442.3312");
+    pos.lngE = procesar_pos("06011.2296");
+    pos.latC = procesar_pos("3442.1444");
+    pos.lngC = procesar_pos("06011.5048");
+    checkNewPos(&queue, pos, &dir);
+
+
+    pos.latE = procesar_pos("3442.3312");
+    pos.lngE = procesar_pos("06011.2296");
+    pos.latC = procesar_pos("3442.1444");
+    pos.lngC = procesar_pos("06011.5048");
+    checkNewPos(&queue, pos, &dir);
+
+
+    pos.latE = procesar_pos("3442.3312");
+    pos.lngE = procesar_pos("06011.2296");
+    pos.latC = procesar_pos("3442.1444");
+    pos.lngC = procesar_pos("06011.5048");
+    checkNewPos(&queue, pos, &dir);
+
+
+    pos.latE = procesar_pos("3442.3312");
+    pos.lngE = procesar_pos("06011.2296");
+    pos.latC = procesar_pos("3442.1444");
+    pos.lngC = procesar_pos("06011.5048");
+    checkNewPos(&queue, pos, &dir);
+
+
+    pos.latE = procesar_pos("3442.3312");
+    pos.lngE = procesar_pos("06011.2296");
+    pos.latC = procesar_pos("3442.1444");
+    pos.lngC = procesar_pos("06011.5048");
+    checkNewPos(&queue, pos, &dir);
+
+
+    pos.latE = procesar_pos("3442.3312");
+    pos.lngE = procesar_pos("06011.2296");
+    pos.latC = procesar_pos("3442.1444");
+    pos.lngC = procesar_pos("06011.5048");
+    checkNewPos(&queue, pos, &dir);
+
+    pos.latE = procesar_pos("3442.3312");
+    pos.lngE = procesar_pos("06011.2296");
+    pos.latC = procesar_pos("3442.1444");
+    pos.lngC = procesar_pos("06011.5048");
+    checkNewPos(&queue, pos, &dir);
+
+
+    pos.latE = procesar_pos("3442.3312");
+    pos.lngE = procesar_pos("06011.2296");
+    pos.latC = procesar_pos("3442.1444");
+    pos.lngC = procesar_pos("06011.5048");
+    checkNewPos(&queue, pos, &dir);
+
+
+    pos.latE = procesar_pos("3442.3312");
+    pos.lngE = procesar_pos("06011.2296");
+    pos.latC = procesar_pos("3442.1444");
+    pos.lngC = procesar_pos("06011.5048");
+    checkNewPos(&queue, pos, &dir);
+
+
+    pos.latE = procesar_pos("3442.3312");
+    pos.lngE = procesar_pos("06011.2296");
+    pos.latC = procesar_pos("3442.1444");
+    pos.lngC = procesar_pos("06011.5048");
+    checkNewPos(&queue, pos, &dir);
+
+
+    pos.latE = procesar_pos("3442.3312");
+    pos.lngE = procesar_pos("06011.2296");
+    pos.latC = procesar_pos("3442.1444");
+    pos.lngC = procesar_pos("06011.5048");
+    checkNewPos(&queue, pos, &dir);
+
+
+    pos.latE = procesar_pos("3442.3312");
+    pos.lngE = procesar_pos("06011.2296");
+    pos.latC = procesar_pos("3442.1444");
+    pos.lngC = procesar_pos("06011.5048");
+    checkNewPos(&queue, pos, &dir);
+
+
+    pos.latE = procesar_pos("3442.3312");
+    pos.lngE = procesar_pos("06011.2296");
+    pos.latC = procesar_pos("3442.1444");
+    pos.lngC = procesar_pos("06011.5048");
+    checkNewPos(&queue, pos, &dir);
+
+
+    pos.latE = procesar_pos("3442.3312");
+    pos.lngE = procesar_pos("06011.2296");
+    pos.latC = procesar_pos("3442.1444");
+    pos.lngC = procesar_pos("06011.5048");
+    checkNewPos(&queue, pos, &dir);
+
+
+    pos.latE = procesar_pos("3442.3312");
+    pos.lngE = procesar_pos("06011.2296");
+    pos.latC = procesar_pos("3442.1444");
+    pos.lngC = procesar_pos("06011.5048");
+    checkNewPos(&queue, pos, &dir);
+
+
+    pos.latE = procesar_pos("3442.3312");
+    pos.lngE = procesar_pos("06011.2296");
+    pos.latC = procesar_pos("3442.1444");
+    pos.lngC = procesar_pos("06011.5048");
+    checkNewPos(&queue, pos, &dir);
+
+
+    pos.latE = procesar_pos("3442.3258");
+    pos.lngE = procesar_pos("06011.2272");
+    pos.latC = procesar_pos("3442.1444");
+    pos.lngC = procesar_pos("06011.5048");
+    checkNewPos(&queue, pos, &dir);
+
+
+    pos.latE = procesar_pos("3442.3258");
+    pos.lngE = procesar_pos("06011.2272");
+    pos.latC = procesar_pos("3442.1444");
+    pos.lngC = procesar_pos("06011.5048");
+    checkNewPos(&queue, pos, &dir);
+
+
+    pos.latE = procesar_pos("3442.3258");
+    pos.lngE = procesar_pos("06011.2272");
+    pos.latC = procesar_pos("3442.1444");
+    pos.lngC = procesar_pos("06011.5048");
+    checkNewPos(&queue, pos, &dir);
+
+    pos.latE = procesar_pos("3442.3288");
+    pos.lngE = procesar_pos("06011.2242");
+    pos.latC = procesar_pos("3442.1444");
+    pos.lngC = procesar_pos("06011.5048");
+    checkNewPos(&queue, pos, &dir);
+
+    pos.latE = procesar_pos("3442.3318");
+    pos.lngE = procesar_pos("06011.2212");
+    pos.latC = procesar_pos("3442.1444");
+    pos.lngC = procesar_pos("06011.5048");
+    checkNewPos(&queue, pos, &dir);
+
+    pos.latE = procesar_pos("3442.3348");
+    pos.lngE = procesar_pos("06011.2182");
+    pos.latC = procesar_pos("3442.1444");
+    pos.lngC = procesar_pos("06011.5048");
+    checkNewPos(&queue, pos, &dir);
+
+    pos.latE = procesar_pos("3442.3378");
+    pos.lngE = procesar_pos("06011.2152");
+    pos.latC = procesar_pos("3442.1444");
+    pos.lngC = procesar_pos("06011.5048");
+    checkNewPos(&queue, pos, &dir);
+
 
     printQue(queue.first);
-    printf("Count: %d", queue.count);
+    printf("Count: %d\n", queue.count);
+
+    printf("AZ: %f", Calculo_AZIMUTH(procesar_pos("3442.3258"), procesar_pos("06011.2272"), procesar_pos("3442.1444"), procesar_pos("06011.5048")));
+
+
 }
